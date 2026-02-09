@@ -141,15 +141,30 @@ with tab_dashboard:
     df = get_all_incidents()
     
     if df.empty:
-        st.info("📭 Nenhum incidente registrado ainda.")
+        # Enhanced empty state
+        st.markdown("""
+        <div style="text-align: center; padding: 60px 20px;">
+            <div style="font-size: 4rem; margin-bottom: 16px;">📊</div>
+            <h3 style="color: #475569; margin-bottom: 8px;">Nenhum incidente registrado</h3>
+            <p style="color: #94a3b8;">Comece registrando seu primeiro incidente na aba "Registrar Problema"</p>
+        </div>
+        """, unsafe_allow_html=True)
     else:
         df['data'] = pd.to_datetime(df['data'])
         
-        # Metrics
+        # Calculate metrics with trends (compare last 7 days vs previous 7 days)
+        today = df['data'].max()
+        last_7_days = df[df['data'] >= (today - pd.Timedelta(days=7))]
+        prev_7_days = df[(df['data'] >= (today - pd.Timedelta(days=14))) & (df['data'] < (today - pd.Timedelta(days=7)))]
+        
         total_hpp = df['hpp'].sum()
         total_incidentes = len(df)
         media_hpp = df['hpp'].mean()
         environment_score = max(0, min(10, 10 * (1 - (total_hpp / capacidade_total))))
+        
+        # Calculate trend deltas
+        hpp_trend = last_7_days['hpp'].sum() - prev_7_days['hpp'].sum() if not prev_7_days.empty else 0
+        inc_trend = len(last_7_days) - len(prev_7_days) if not prev_7_days.empty else 0
         
         col_metrics = st.columns(4)
         with col_metrics[0]:
@@ -157,9 +172,11 @@ with tab_dashboard:
             st.metric("🛡️ Saúde do Ambiente", f"{environment_score:.1f}/10", delta=status,
                       delta_color="normal" if environment_score >= 7 else "off" if environment_score >= 4 else "inverse")
         with col_metrics[1]:
-            st.metric("⏱️ Total HPP", f"{total_hpp:.1f}h")
+            trend_label = f"{hpp_trend:+.1f}h (7d)" if hpp_trend != 0 else None
+            st.metric("⏱️ Total HPP", f"{total_hpp:.1f}h", delta=trend_label, delta_color="inverse" if hpp_trend > 0 else "normal")
         with col_metrics[2]:
-            st.metric("📊 Incidentes", total_incidentes)
+            trend_label = f"{inc_trend:+d} (7d)" if inc_trend != 0 else None
+            st.metric("📊 Incidentes", total_incidentes, delta=trend_label, delta_color="inverse" if inc_trend > 0 else "normal")
         with col_metrics[3]:
             st.metric("📈 Média HPP", f"{media_hpp:.2f}h")
         
@@ -254,9 +271,28 @@ with tab_historico:
         
         df_display = df_filtrado.copy()
         df_display['data'] = df_display['data'].dt.strftime('%d/%m/%Y')
+        
+        # Apply badge styling to impact type
+        def style_impact(val):
+            if 'Bloqueio' in str(val):
+                return '🔴 ' + val.split('(')[0].strip()
+            elif 'Severa' in str(val):
+                return '🟠 ' + val.split('(')[0].strip()
+            else:
+                return '🟡 ' + val.split('(')[0].strip()
+        
+        df_display['tipo_impacto'] = df_display['tipo_impacto'].apply(style_impact)
         df_display = df_display[['id', 'data', 'hora_inicio', 'squad', 'categoria', 'tipo_impacto', 'duracao', 'hpp', 'descricao']]
         df_display.columns = ['ID', 'Data', 'Hora', 'Squad', 'Categoria', 'Impacto', 'Duração', 'HPP', 'Descrição']
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
+        
+        # Configure column display
+        column_config = {
+            "ID": st.column_config.NumberColumn("ID", width="small"),
+            "HPP": st.column_config.NumberColumn("HPP", format="%.2f h"),
+            "Duração": st.column_config.NumberColumn("Duração", format="%.2f h"),
+        }
+        
+        st.dataframe(df_display, use_container_width=True, hide_index=True, column_config=column_config)
         
         st.markdown("---")
         col_export, col_delete = st.columns([1, 1])
@@ -265,11 +301,34 @@ with tab_historico:
             st.download_button("📥 Exportar CSV", csv, f"bit_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
         with col_delete:
             id_deletar = st.number_input("ID para deletar", min_value=1, step=1, value=None)
+            
+            # Initialize session state for delete confirmation
+            if 'confirm_delete' not in st.session_state:
+                st.session_state.confirm_delete = False
+            if 'delete_id' not in st.session_state:
+                st.session_state.delete_id = None
+            
             if st.button("🗑️ Deletar", use_container_width=True, type="secondary"):
                 if id_deletar:
-                    delete_incident(id_deletar)
-                    st.success(f"✅ Registro #{id_deletar} deletado!")
-                    st.rerun()
+                    st.session_state.confirm_delete = True
+                    st.session_state.delete_id = id_deletar
+            
+            # Show confirmation dialog
+            if st.session_state.confirm_delete and st.session_state.delete_id:
+                st.warning(f"⚠️ Confirma exclusão do registro #{st.session_state.delete_id}?")
+                col_yes, col_no = st.columns(2)
+                with col_yes:
+                    if st.button("✅ Sim, deletar", use_container_width=True, type="primary"):
+                        delete_incident(st.session_state.delete_id)
+                        st.session_state.confirm_delete = False
+                        st.session_state.delete_id = None
+                        st.success(f"✅ Registro deletado!")
+                        st.rerun()
+                with col_no:
+                    if st.button("❌ Cancelar", use_container_width=True):
+                        st.session_state.confirm_delete = False
+                        st.session_state.delete_id = None
+                        st.rerun()
 
 # ==================== TAB 4: CONFIGURAÇÕES ====================
 with tab_config:
