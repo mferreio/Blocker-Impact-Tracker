@@ -1,0 +1,15 @@
+name: blocker-impact-tracker
+type: web
+deploy:
+  docker:
+    dockerfile: Dockerfile
+ports:
+  - port: 8000
+    protocol: http
+env:
+  - key: PORT
+    value: "8000"
+healthChecks:
+  - type: http
+    path: /_stcore/health
+    port: 8000

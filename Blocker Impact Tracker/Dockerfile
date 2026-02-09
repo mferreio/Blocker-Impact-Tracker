@@ -17,5 +17,5 @@ EXPOSE 8501
 # Healthcheck
 HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health
 
-# Entrypoint
-ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Entrypoint - Use PORT env var (Koyeb sets this)
+CMD streamlit run app.py --server.port=${PORT:-8501} --server.address=0.0.0.0
