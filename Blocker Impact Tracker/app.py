@@ -282,9 +282,6 @@ with tab_historico:
         
         st.markdown("---")
         
-        df_display = df_filtrado.copy()
-        df_display['data'] = df_display['data'].dt.strftime('%d/%m/%Y')
-        
         # Apply badge styling to impact type
         def style_impact(val):
             if 'Bloqueio' in str(val):
@@ -294,16 +291,64 @@ with tab_historico:
             else:
                 return '🟡 ' + val.split('(')[0].strip()
         
-        df_display['tipo_impacto'] = df_display['tipo_impacto'].apply(style_impact)
-        df_display = df_display[['id', 'data', 'hora_inicio', 'squad', 'categoria', 'tipo_impacto', 'duracao', 'hpp', 'descricao']]
-        df_display.columns = ['ID', 'Data', 'Hora', 'Squad', 'Categoria', 'Impacto', 'Duração', 'HPP', 'Descrição']
-        
         # Configure column display
         column_config = {
             "ID": st.column_config.NumberColumn("ID", width="small"),
             "HPP": st.column_config.NumberColumn("HPP", format="%.2f h"),
             "Duração": st.column_config.NumberColumn("Duração", format="%.2f h"),
         }
+        
+        # Sorting options
+        col_sort, col_order, col_page_size = st.columns([2, 1, 1])
+        with col_sort:
+            sort_column = st.selectbox(
+                "🔀 Ordenar por",
+                options=['Data', 'HPP', 'Duração', 'Squad', 'Categoria'],
+                key="sort_col"
+            )
+        with col_order:
+            sort_order = st.selectbox("Ordem", ["⬇️ Desc", "⬆️ Asc"], key="sort_order")
+        with col_page_size:
+            page_size = st.selectbox("Por página", [10, 25, 50, 100], key="page_size")
+        
+        # Apply sorting
+        sort_map = {'Data': 'data', 'HPP': 'hpp', 'Duração': 'duracao', 'Squad': 'squad', 'Categoria': 'categoria'}
+        ascending = "Asc" in sort_order
+        
+        # Sort on original df_filtrado before display transformation
+        df_sorted = df_filtrado.sort_values(by=sort_map.get(sort_column, 'data'), ascending=ascending)
+        
+        # Pagination
+        total_records = len(df_sorted)
+        total_pages = max(1, (total_records + page_size - 1) // page_size)
+        
+        if 'current_page' not in st.session_state:
+            st.session_state.current_page = 1
+        
+        # Pagination controls
+        col_prev, col_info, col_next = st.columns([1, 2, 1])
+        with col_prev:
+            if st.button("◀️ Anterior", use_container_width=True, disabled=st.session_state.current_page <= 1):
+                st.session_state.current_page -= 1
+                st.rerun()
+        with col_info:
+            st.markdown(f"<div style='text-align: center; padding: 8px;'>Página **{st.session_state.current_page}** de **{total_pages}** ({total_records} registros)</div>", unsafe_allow_html=True)
+        with col_next:
+            if st.button("Próxima ▶️", use_container_width=True, disabled=st.session_state.current_page >= total_pages):
+                st.session_state.current_page += 1
+                st.rerun()
+        
+        # Apply pagination
+        start_idx = (st.session_state.current_page - 1) * page_size
+        end_idx = start_idx + page_size
+        df_paginated = df_sorted.iloc[start_idx:end_idx]
+        
+        # Prepare display dataframe
+        df_display = df_paginated.copy()
+        df_display['data'] = pd.to_datetime(df_display['data']).dt.strftime('%d/%m/%Y')
+        df_display['tipo_impacto'] = df_display['tipo_impacto'].apply(style_impact)
+        df_display = df_display[['id', 'data', 'hora_inicio', 'squad', 'categoria', 'tipo_impacto', 'duracao', 'hpp', 'descricao']]
+        df_display.columns = ['ID', 'Data', 'Hora', 'Squad', 'Categoria', 'Impacto', 'Duração', 'HPP', 'Descrição']
         
         st.dataframe(df_display, use_container_width=True, hide_index=True, column_config=column_config)
         
