@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: blocker-impact-tracker
+    env: docker
+    plan: free
+    region: oregon
+    dockerContext: Blocker Impact Tracker
+    dockerfilePath: Blocker Impact Tracker/Dockerfile
+    healthCheckPath: /_stcore/health
