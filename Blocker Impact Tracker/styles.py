@@ -1,15 +1,38 @@
 """
 B.I.T. - Blocker Impact Tracker
-Styles module - Enhanced modern UI theme with improved UX
+Styles module - Enhanced modern UI theme with improved UX and dark mode
 """
 
 
-def get_custom_css():
-    """Returns the custom CSS for the application - enhanced modern theme."""
-    return """
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+def get_custom_css(dark_mode=False):
+    """Returns the custom CSS for the application - enhanced modern theme with dark mode support."""
     
+    if dark_mode:
+        css_vars = """
+    :root {
+        --bg-primary: #0f172a;
+        --bg-secondary: #1e293b;
+        --bg-tertiary: #334155;
+        --bg-card: #1e293b;
+        --border-color: #475569;
+        --border-hover: #64748b;
+        --text-primary: #f1f5f9;
+        --text-secondary: #cbd5e1;
+        --text-muted: #94a3b8;
+        --accent-blue: #3b82f6;
+        --accent-green: #10b981;
+        --accent-yellow: #f59e0b;
+        --accent-red: #ef4444;
+        --accent-orange: #f97316;
+        --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+        --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.4), 0 2px 4px -1px rgba(0,0,0,0.2);
+        --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.4), 0 4px 6px -2px rgba(0,0,0,0.2);
+        --transition-fast: 0.15s ease;
+        --transition-normal: 0.2s ease;
+    }
+        """
+    else:
+        css_vars = """
     :root {
         --bg-primary: #f8fafc;
         --bg-secondary: #ffffff;
@@ -31,7 +54,9 @@ def get_custom_css():
         --transition-fast: 0.15s ease;
         --transition-normal: 0.2s ease;
     }
+        """
     
+    base_css = """
     /* Hide Streamlit default elements */
     #MainMenu, header, footer, .stDeployButton { visibility: hidden; }
     header { display: none !important; }
@@ -293,60 +318,8 @@ def get_custom_css():
     ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
     
-    /* Custom badge classes for impact types */
-    .badge-bloqueio {
-        background: linear-gradient(135deg, #ef4444, #dc2626) !important;
-        color: white !important;
-        padding: 4px 12px !important;
-        border-radius: 20px !important;
-        font-size: 0.75rem !important;
-        font-weight: 600 !important;
-        display: inline-block !important;
-        box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3) !important;
-    }
-    
-    .badge-severa {
-        background: linear-gradient(135deg, #f97316, #ea580c) !important;
-        color: white !important;
-        padding: 4px 12px !important;
-        border-radius: 20px !important;
-        font-size: 0.75rem !important;
-        font-weight: 600 !important;
-        display: inline-block !important;
-        box-shadow: 0 2px 4px rgba(249, 115, 22, 0.3) !important;
-    }
-    
-    .badge-moderada {
-        background: linear-gradient(135deg, #f59e0b, #d97706) !important;
-        color: white !important;
-        padding: 4px 12px !important;
-        border-radius: 20px !important;
-        font-size: 0.75rem !important;
-        font-weight: 600 !important;
-        display: inline-block !important;
-        box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3) !important;
-    }
-    
-    /* Delete button - danger style */
-    .danger-btn button {
-        background: var(--accent-red) !important;
-    }
-    
-    .danger-btn button:hover {
-        background: #dc2626 !important;
-    }
-    
-    /* Empty state styling */
-    .empty-state {
-        text-align: center;
-        padding: 60px 20px;
-        color: var(--text-muted);
-    }
-    
-    .empty-state-icon {
-        font-size: 4rem;
-        margin-bottom: 16px;
-    }
+    /* Toggle switch styling */
+    .stToggle > div { color: var(--text-primary) !important; }
     
     /* Loading animation */
     @keyframes pulse {
@@ -357,5 +330,6 @@ def get_custom_css():
     .loading {
         animation: pulse 2s infinite;
     }
-</style>
-"""
+    """
+    
+    return "<style>\\n    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');\\n" + css_vars + base_css + "\\n</style>"

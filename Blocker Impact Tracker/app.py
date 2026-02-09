@@ -26,8 +26,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Apply custom CSS
-st.markdown(get_custom_css(), unsafe_allow_html=True)
+# Apply custom CSS (with dark mode support)
+dark_mode = st.session_state.get('dark_mode', False)
+st.markdown(get_custom_css(dark_mode), unsafe_allow_html=True)
 
 # Initialize database
 init_database()
@@ -62,7 +63,19 @@ with st.sidebar:
         st.markdown(f"{emoji} **{nome.split('(')[0].strip()}**: {int(peso*100)}%")
     
     st.markdown("---")
-    st.markdown("### 🛡️ B.I.T. v1.0")
+    
+    # Dark mode toggle
+    st.markdown("### 🎨 Aparência")
+    if 'dark_mode' not in st.session_state:
+        st.session_state.dark_mode = False
+    
+    dark_mode = st.toggle("🌙 Modo Escuro", value=st.session_state.dark_mode, key="dark_mode_toggle")
+    if dark_mode != st.session_state.dark_mode:
+        st.session_state.dark_mode = dark_mode
+        st.rerun()
+    
+    st.markdown("---")
+    st.markdown("### 🛡️ B.I.T. v1.1")
 
 # ==================== HEADER ====================
 st.markdown("# 🛡️ B.I.T. - Blocker Impact Tracker")
