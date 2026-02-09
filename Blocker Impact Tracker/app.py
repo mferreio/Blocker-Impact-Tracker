@@ -17,6 +17,7 @@ from database import (
 from config import DEFAULT_CAPACITY, MIN_CAPACITY, MAX_CAPACITY
 from styles import get_custom_css
 from charts import create_gauge, create_pareto, create_heatmap, create_timeline, create_squad_breakdown
+from exports import export_to_excel, generate_pdf_report
 
 # ==================== PAGE CONFIG ====================
 st.set_page_config(
@@ -237,6 +238,27 @@ with tab_dashboard:
         df_squad = df.groupby('squad').agg({'hpp': 'sum', 'id': 'count'}).reset_index()
         df_squad.columns = ['Squad', 'Total HPP', 'Incidentes']
         st.plotly_chart(create_squad_breakdown(df_squad), use_container_width=True)
+        
+        # PDF Export section
+        st.markdown("---")
+        st.markdown("#### 📄 Exportar Relatório")
+        col_pdf_btn, col_pdf_space = st.columns([1, 2])
+        with col_pdf_btn:
+            # Prepare metrics for PDF
+            pdf_metrics = {
+                'total_incidentes': total_incidentes,
+                'total_hpp': total_hpp,
+                'media_hpp': media_hpp,
+                'environment_score': environment_score
+            }
+            pdf_data = generate_pdf_report(df, pdf_metrics, "Mensal")
+            st.download_button(
+                "📥 Baixar Relatório PDF",
+                data=pdf_data,
+                file_name=f"bit_relatorio_{datetime.now().strftime('%Y%m%d')}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
 
 # ==================== TAB 3: HISTÓRICO ====================
 with tab_historico:
@@ -353,10 +375,13 @@ with tab_historico:
         st.dataframe(df_display, use_container_width=True, hide_index=True, column_config=column_config)
         
         st.markdown("---")
-        col_export, col_delete = st.columns([1, 1])
-        with col_export:
+        col_csv, col_excel, col_delete = st.columns([1, 1, 1])
+        with col_csv:
             csv = df_filtrado.to_csv(index=False, encoding='utf-8-sig')
             st.download_button("📥 Exportar CSV", csv, f"bit_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
+        with col_excel:
+            xlsx_data = export_to_excel(df_filtrado)
+            st.download_button("📊 Exportar Excel", xlsx_data, f"bit_{datetime.now().strftime('%Y%m%d')}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
         with col_delete:
             id_deletar = st.number_input("ID para deletar", min_value=1, step=1, value=None)
             
