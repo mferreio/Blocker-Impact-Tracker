@@ -17,4 +17,4 @@ EXPOSE 8501
 # Note: Health check handled by Koyeb externally
 
 # Entrypoint - Use PORT env var (Koyeb sets this)
-CMD streamlit run app.py --server.port=${PORT:-8501} --server.address=0.0.0.0
+CMD ["sh", "-c", "streamlit run app.py --server.port=${PORT:-8501} --server.address=0.0.0.0"]
