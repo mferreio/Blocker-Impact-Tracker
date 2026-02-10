@@ -9,10 +9,11 @@ from datetime import datetime, date
 
 # Local modules
 from database import (
-    init_database, insert_incident, get_all_incidents, delete_incident,
+    init_database, insert_incident, get_all_incidents, delete_incident, update_incident, delete_many_incidents,
     get_categorias, add_categoria, delete_categoria,
     get_tipos_impacto, add_tipo_impacto, delete_tipo_impacto,
-    get_squads, add_squad, delete_squad
+    get_squads, add_squad, delete_squad, update_squad,
+    get_produtos, add_produto, delete_produto, update_produto
 )
 from config import DEFAULT_CAPACITY, MIN_CAPACITY, MAX_CAPACITY
 from styles import get_custom_css
@@ -32,6 +33,80 @@ st.markdown(get_custom_css(), unsafe_allow_html=True)
 
 # Initialize database
 init_database()
+
+# Session State for Table Key (to force reset selection)
+if 'table_key' not in st.session_state:
+    st.session_state.table_key = 0
+
+# ==================== DIALOGS ====================
+@st.dialog("✏️ Editar Incidente")
+def edit_incident_dialog(incident):
+    st.write(f"Editando registro #{incident['id']}")
+    
+    # Get helpers for dropdowns
+    squads = get_squads()
+    produtos = get_produtos()
+    cats = get_categorias()
+    tipos = get_tipos_impacto()
+    
+    with st.form("edit_incident_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            data = st.date_input("Data", value=pd.to_datetime(incident['data']))
+            
+            # Hora handling
+            hora_val = None
+            if incident['hora_inicio']:
+                try:
+                    hora_val = pd.to_datetime(str(incident['hora_inicio']), format='%H:%M:%S').time()
+                except:
+                    try:
+                        hora_val = pd.to_datetime(str(incident['hora_inicio']), format='%H:%M').time()
+                    except:
+                        hora_val = None
+            
+            hora = st.time_input("Hora Início", value=hora_val)
+            
+        with col2:
+            squad_idx = squads.index(incident['squad']) if incident['squad'] in squads else 0
+            squad = st.selectbox("Squad", squads, index=squad_idx)
+            
+            prod_val = incident['produto'] if 'produto' in incident and incident['produto'] else None
+            prod_idx = produtos.index(prod_val) if prod_val in produtos else 0
+            produto = st.selectbox("Produto", produtos, index=prod_idx)
+            
+            cat_idx = cats.index(incident['categoria']) if incident['categoria'] in cats else 0
+            categoria = st.selectbox("Categoria", cats, index=cat_idx)
+            
+        # Impacto
+        tipo_names = list(tipos.keys())
+        tipo_idx = tipo_names.index(incident['tipo_impacto']) if incident['tipo_impacto'] in tipo_names else 0
+        tipo_impacto_nome = st.selectbox("Tipo de Impacto", tipo_names, index=tipo_idx)
+        
+        duracao = st.number_input("Duração (horas)", min_value=0.1, step=0.1, value=float(incident['duracao']))
+        descricao = st.text_area("Descrição", value=incident['descricao'] if incident['descricao'] else "")
+        
+        col_save, col_cancel = st.columns(2)
+        with col_save:
+            if st.form_submit_button("✅ Salvar Alterações", use_container_width=True, type="primary"):
+                peso = tipos[tipo_impacto_nome]
+                hpp = duracao * peso
+                
+                if update_incident(incident['id'], data, hora, squad, categoria, tipo_impacto_nome, peso, duracao, hpp, descricao, produto):
+                    st.success("Atualizado!")
+                    st.session_state.table_key += 1
+                    st.rerun()
+                else:
+                    st.error("Erro ao atualizar")
+
+    st.markdown("---")
+    if st.button("🗑️ Deletar Registro", type="secondary", use_container_width=True):
+        if delete_incident(int(incident['id'])):
+            st.success("Registro deletado!")
+            st.session_state.table_key += 1
+            st.rerun()
+        else:
+            st.error("Erro ao deletar registro.")
 
 # ==================== SIDEBAR ====================
 with st.sidebar:
@@ -88,6 +163,7 @@ with tab_registro:
     categorias = get_categorias()
     tipos_impacto = get_tipos_impacto()
     squads = get_squads()
+    produtos = get_produtos()
     
     with st.form("form_incidente", clear_on_submit=True):
         col1, col2 = st.columns(2)
@@ -96,6 +172,7 @@ with tab_registro:
             data_incidente = st.date_input("📅 Data do Incidente", value=date.today(), max_value=date.today())
             hora_inicio = st.time_input("⏰ Hora de Início", value=None)
             squad = st.selectbox("👥 Squad", options=squads)
+            produto = st.selectbox("📦 Produto", options=produtos)
         
         with col2:
             categoria = st.selectbox("📂 Categoria", options=categorias)
@@ -127,7 +204,7 @@ with tab_registro:
             else:
                 hora_inicio_str = hora_inicio.strftime("%H:%M") if hora_inicio else None
                 insert_incident(
-                    data=data_incidente.isoformat(),
+                    data=data_incidente,
                     hora_inicio=hora_inicio_str,
                     squad=squad,
                     categoria=categoria,
@@ -135,7 +212,8 @@ with tab_registro:
                     peso=peso,
                     duracao=duracao,
                     hpp=hpp_calculado,
-                    descricao=descricao
+                    descricao=descricao,
+                    produto=produto
                 )
                 st.success(f"✅ Incidente registrado! HPP: {hpp_calculado:.2f}h")
                 st.balloons()
@@ -271,16 +349,28 @@ with tab_historico:
         with col_filtros[3]:
             tipo_filtro = st.selectbox("⚠️ Impacto", ['Todos'] + df['tipo_impacto'].unique().tolist(), key="hist_tipo")
         
+        col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+        with col_f1:
+            f_squad = st.multiselect("Squad", options=sorted(df['squad'].unique()))
+        with col_f2:
+            f_prod = st.multiselect("Produto", options=sorted(df['produto'].dropna().unique()) if 'produto' in df.columns else [])
+        with col_f3:
+            f_cat = st.multiselect("Categoria", options=sorted(df['categoria'].unique()))
+        with col_f4:
+            f_tipo = st.multiselect("Impacto", options=sorted(df['tipo_impacto'].unique()))
+        
         # Apply filters
         df_filtrado = df.copy()
         if len(data_range) == 2:
             df_filtrado = df_filtrado[(df_filtrado['data'].dt.date >= data_range[0]) & (df_filtrado['data'].dt.date <= data_range[1])]
-        if squad_filtro != 'Todos':
-            df_filtrado = df_filtrado[df_filtrado['squad'] == squad_filtro]
-        if categoria_filtro != 'Todas':
-            df_filtrado = df_filtrado[df_filtrado['categoria'] == categoria_filtro]
-        if tipo_filtro != 'Todos':
-            df_filtrado = df_filtrado[df_filtrado['tipo_impacto'] == tipo_filtro]
+        if f_squad:
+            df_filtrado = df_filtrado[df_filtrado['squad'].isin(f_squad)]
+        if f_prod and 'produto' in df.columns:
+            df_filtrado = df_filtrado[df_filtrado['produto'].isin(f_prod)]
+        if f_cat:
+            df_filtrado = df_filtrado[df_filtrado['categoria'].isin(f_cat)]
+        if f_tipo:
+            df_filtrado = df_filtrado[df_filtrado['tipo_impacto'].isin(f_tipo)]
         
         st.markdown("---")
         
@@ -359,56 +449,66 @@ with tab_historico:
         df_display = df_paginated.copy()
         df_display['data'] = pd.to_datetime(df_display['data']).dt.strftime('%d/%m/%Y')
         df_display['tipo_impacto'] = df_display['tipo_impacto'].apply(style_impact)
-        df_display = df_display[['id', 'data', 'hora_inicio', 'squad', 'categoria', 'tipo_impacto', 'duracao', 'hpp', 'descricao']]
-        df_display.columns = ['ID', 'Data', 'Hora', 'Squad', 'Categoria', 'Impacto', 'Duração', 'HPP', 'Descrição']
+        df_display = df_display[['id', 'data', 'hora_inicio', 'squad', 'produto', 'categoria', 'tipo_impacto', 'duracao', 'hpp', 'descricao']]
+        df_display.columns = ['ID', 'Data', 'Hora', 'Squad', 'Produto', 'Categoria', 'Impacto', 'Duração', 'HPP', 'Descrição']
         
-        st.dataframe(df_display, use_container_width=True, hide_index=True, column_config=column_config)
+        event = st.dataframe(
+            df_display,
+            use_container_width=True,
+            hide_index=True,
+            column_config=column_config,
+            on_select="rerun",
+            selection_mode="multi-row",
+            key=f"history_table_{st.session_state.table_key}"
+        )
+        
+        # Action Bar for selection
+        if len(event.selection.rows) > 0:
+            st.markdown("---")
+            selected_indices = event.selection.rows
+            # Get IDs from displayed dataframe
+            selected_ids = [int(df_display.iloc[idx]['ID']) for idx in selected_indices]
+            count = len(selected_ids)
+            
+            c1, c2, c3 = st.columns([1, 1, 3])
+            
+            with c1:
+                # Edit button only for single selection
+                if count == 1:
+                    if st.button("✏️ Editar", use_container_width=True, type="primary"):
+                        record = df[df['id'] == selected_ids[0]].iloc[0]
+                        edit_incident_dialog(record)
+                else:
+                    st.button("✏️ Editar", disabled=True, use_container_width=True, help="Selecione apenas 1 registro para editar")
+
+            with c2:
+                # Delete button handles multiple
+                if st.button(f"🗑️ Excluir ({count})", type="secondary", use_container_width=True):
+                    if delete_many_incidents(selected_ids):
+                        st.success(f"✅ {count} registros excluídos!")
+                        st.session_state.table_key += 1
+                        st.rerun()
+                    else:
+                        st.error("Erro ao excluir registros.")
         
         st.markdown("---")
-        col_csv, col_excel, col_delete = st.columns([1, 1, 1])
+        col_csv, col_excel = st.columns(2)
         with col_csv:
             csv = df_filtrado.to_csv(index=False, encoding='utf-8-sig')
             st.download_button("📥 Exportar CSV", csv, f"bit_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
         with col_excel:
             xlsx_data = export_to_excel(df_filtrado)
             st.download_button("📊 Exportar Excel", xlsx_data, f"bit_{datetime.now().strftime('%Y%m%d')}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-        with col_delete:
-            id_deletar = st.number_input("ID para deletar", min_value=1, step=1, value=None)
+
             
-            # Initialize session state for delete confirmation
-            if 'confirm_delete' not in st.session_state:
-                st.session_state.confirm_delete = False
-            if 'delete_id' not in st.session_state:
-                st.session_state.delete_id = None
-            
-            if st.button("🗑️ Deletar", use_container_width=True, type="secondary"):
-                if id_deletar:
-                    st.session_state.confirm_delete = True
-                    st.session_state.delete_id = id_deletar
-            
-            # Show confirmation dialog
-            if st.session_state.confirm_delete and st.session_state.delete_id:
-                st.warning(f"⚠️ Confirma exclusão do registro #{st.session_state.delete_id}?")
-                col_yes, col_no = st.columns(2)
-                with col_yes:
-                    if st.button("✅ Sim, deletar", use_container_width=True, type="primary"):
-                        delete_incident(st.session_state.delete_id)
-                        st.session_state.confirm_delete = False
-                        st.session_state.delete_id = None
-                        st.success(f"✅ Registro deletado!")
-                        st.rerun()
-                with col_no:
-                    if st.button("❌ Cancelar", use_container_width=True):
-                        st.session_state.confirm_delete = False
-                        st.session_state.delete_id = None
-                        st.rerun()
+
 
 # ==================== TAB 4: CONFIGURAÇÕES ====================
 with tab_config:
     st.markdown("### ⚙️ Gerenciar Opções")
     st.caption("Adicione, edite ou remova categorias, tipos de impacto e squads")
     
-    col_cat, col_tipo, col_squad = st.columns(3)
+    col_cat, col_tipo = st.columns(2)
     
     # ========== CATEGORIAS ==========
     with col_cat:
@@ -480,6 +580,10 @@ with tab_config:
                     else:
                         st.error("❌ Já existe!")
     
+    st.markdown("---")
+    
+    col_squad, col_prod = st.columns(2)
+    
     # ========== SQUADS ==========
     with col_squad:
         st.markdown("#### 👥 Squads")
@@ -509,6 +613,41 @@ with tab_config:
             if st.form_submit_button("Adicionar", use_container_width=True):
                 if novo_squad.strip():
                     if add_squad(novo_squad.strip()):
+                        st.success("✅ Adicionado!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Já existe!")
+
+
+    # ========== PRODUTOS ==========
+    with col_prod:
+        st.markdown("#### 📦 Produtos")
+        
+        produtos_list = get_produtos()
+        for i, prod in enumerate(produtos_list):
+            with st.expander(prod, expanded=False):
+                novo_nome_prod = st.text_input("Nome", value=prod, key=f"edit_prod_{i}")
+                col_save, col_del = st.columns(2)
+                with col_save:
+                    if st.button("💾 Salvar", key=f"save_prod_{i}", use_container_width=True):
+                        if novo_nome_prod.strip() and novo_nome_prod != prod:
+                            from database import update_produto
+                            if update_produto(prod, novo_nome_prod.strip()):
+                                st.success("✅ Atualizado!")
+                                st.rerun()
+                            else:
+                                st.error("❌ Nome já existe!")
+                with col_del:
+                    if st.button("🗑️ Excluir", key=f"del_prod_{i}", use_container_width=True, type="secondary"):
+                        delete_produto(prod)
+                        st.rerun()
+        
+        st.markdown("---")
+        with st.form("add_prod", clear_on_submit=True):
+            novo_prod = st.text_input("➕ Novo produto", placeholder="Ex: App Android")
+            if st.form_submit_button("Adicionar", use_container_width=True):
+                if novo_prod.strip():
+                    if add_produto(novo_prod.strip()):
                         st.success("✅ Adicionado!")
                         st.rerun()
                     else:

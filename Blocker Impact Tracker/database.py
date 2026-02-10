@@ -7,7 +7,7 @@ Support for SQLite (local) and PostgreSQL (production)
 import os
 import pandas as pd
 import sqlalchemy
-from sqlalchemy import create_engine, text, MetaData, Table, Column, Integer, String, Float, DateTime, Date, Time, Boolean
+from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, DateTime, Date, Time, Boolean, text, inspect
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
 
@@ -63,6 +63,13 @@ squads = Table(
     Column('created_at', DateTime, default=datetime.now)
 )
 
+produtos = Table(
+    'produtos', metadata,
+    Column('id', Integer, primary_key=True),
+    Column('nome', String, unique=True, nullable=False),
+    Column('created_at', DateTime, default=datetime.now)
+)
+
 
 def get_connection():
     """Returns a database connection."""
@@ -72,7 +79,14 @@ def get_connection():
 def init_database():
     """Initializes the database schema."""
     try:
+        # Check for schema updates FIRST (before create_all to simplify logic or inside)
+        # Actually create_all won't add columns to existing tables.
+        
+        # Create tables if not exist
         metadata.create_all(engine)
+        
+        # Check migrations/schema updates
+        check_schema_updates()
         
         # Check if we need to seed defaults
         with engine.connect() as conn:
@@ -83,6 +97,21 @@ def init_database():
                 conn.commit()
     except Exception as e:
         print(f"Error initializing database: {e}")
+
+def check_schema_updates():
+    """Checks and applies schema updates (migrations)."""
+    try:
+        inspector = inspect(engine)
+        columns = [c['name'] for c in inspector.get_columns('incidents')]
+        
+        if 'produto' not in columns:
+            print("Migrating: Adding 'produto' column to incidents table...")
+            with engine.connect() as conn:
+                # Add column. SQLite and Postgres support ADD COLUMN
+                conn.execute(text("ALTER TABLE incidents ADD COLUMN produto VARCHAR"))
+                conn.commit()
+    except Exception as e:
+        print(f"Migration error: {e}")
 
 
 def _insert_defaults(conn):
@@ -117,22 +146,32 @@ def _insert_defaults(conn):
         [{"nome": squad, "is_default": True} for squad in default_squads]
     )
 
+    # Produtos padrão
+    default_produtos = [
+        "Produto A", "Produto B", "Produto C"
+    ]
+    conn.execute(
+        produtos.insert(),
+        [{"nome": prod, "is_default": True} for prod in default_produtos]
+    )
+
 
 # ==================== INCIDENTS ====================
-def insert_incident(data, hora_inicio, squad, categoria, tipo_impacto, peso, duracao, hpp, descricao):
-    """Inserts a new incident."""
+def insert_incident(data, hora_inicio, squad, categoria, tipo_impacto, peso, duracao, hpp, descricao, produto=None):
+    """Inserts a new incident into the database."""
     with engine.connect() as conn:
         conn.execute(
             incidents.insert().values(
                 data=data,
-                hora_inicio=str(hora_inicio),
+                hora_inicio=hora_inicio,
                 squad=squad,
                 categoria=categoria,
                 tipo_impacto=tipo_impacto,
                 peso=peso,
                 duracao=duracao,
                 hpp=hpp,
-                descricao=descricao
+                descricao=descricao,
+                produto=produto
             )
         )
         conn.commit()
@@ -155,11 +194,51 @@ def get_all_incidents():
 
 def delete_incident(incident_id):
     """Deletes an incident by ID."""
-    with engine.connect() as conn:
-        conn.execute(
-            incidents.delete().where(incidents.c.id == incident_id)
-        )
-        conn.commit()
+    try:
+        with engine.connect() as conn:
+            conn.execute(
+                incidents.delete().where(incidents.c.id == incident_id)
+            )
+            conn.commit()
+        return True
+    except SQLAlchemyError:
+        return False
+
+
+def update_incident(incident_id, data, hora_inicio, squad, categoria, tipo_impacto, peso, duracao, hpp, descricao, produto=None):
+    """Updates an existing incident."""
+    try:
+        with engine.connect() as conn:
+            stmt = incidents.update().where(incidents.c.id == incident_id).values(
+                data=data,
+                hora_inicio=str(hora_inicio),
+                squad=squad,
+                categoria=categoria,
+                tipo_impacto=tipo_impacto,
+                peso=peso,
+                duracao=duracao,
+                hpp=hpp,
+                descricao=descricao,
+                produto=produto
+            )
+            conn.execute(stmt)
+            conn.commit()
+        return True
+    except SQLAlchemyError:
+        return False
+
+
+
+def delete_many_incidents(incident_ids):
+    """Deletes multiple incidents by ID list."""
+    try:
+        with engine.connect() as conn:
+            stmt = incidents.delete().where(incidents.c.id.in_(incident_ids))
+            conn.execute(stmt)
+            conn.commit()
+        return True
+    except SQLAlchemyError:
+        return False
 
 
 # ==================== CATEGORIAS ====================
@@ -247,6 +326,47 @@ def delete_squad(nome):
         conn.execute(squads.delete().where(squads.c.nome == nome))
         conn.commit()
     return True
+
+
+# ==================== PRODUTOS ====================
+def get_produtos():
+    """Returns list of products."""
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("SELECT nome FROM produtos ORDER BY nome")
+        ).fetchall()
+        return [row[0] for row in result] if result else []
+
+
+def add_produto(nome):
+    """Adds a new product."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(produtos.insert().values(nome=nome))
+            conn.commit()
+        return True
+    except SQLAlchemyError:
+        return False
+
+
+def delete_produto(nome):
+    """Removes a product."""
+    with engine.connect() as conn:
+        conn.execute(produtos.delete().where(produtos.c.nome == nome))
+        conn.commit()
+    return True
+
+def update_produto(nome_antigo, nome_novo):
+    try:
+        with engine.connect() as conn:
+            conn.execute(
+                produtos.update().where(produtos.c.nome == nome_antigo).values(nome=nome_novo)
+            )
+            conn.commit()
+        return True
+    except SQLAlchemyError:
+        return False
+
 
 # ==================== UPDATES ====================
 # These were missing implementations in some parts earlier or used custom SQL.
