@@ -13,7 +13,8 @@ from database import (
     get_categorias, add_categoria, delete_categoria,
     get_tipos_impacto, add_tipo_impacto, delete_tipo_impacto,
     get_squads, add_squad, delete_squad, update_squad,
-    get_produtos, add_produto, delete_produto, update_produto
+    get_produtos, add_produto, delete_produto, update_produto,
+    seed_initial_data
 )
 from config import DEFAULT_CAPACITY, MIN_CAPACITY, MAX_CAPACITY
 from styles import get_custom_css
@@ -652,6 +653,16 @@ with tab_config:
                         st.rerun()
                     else:
                         st.error("❌ Já existe!")
+
+# ==================== RESTORE DEFAULTS ====================
+    st.markdown("---")
+    st.caption("🔧 Zona de Perigo / Manutenção")
+    if st.button("🔄 Restaurar Padrões da Base", help="Recria categorias, squads e produtos padrão se estiverem faltando."):
+        if seed_initial_data():
+            st.success("✅ Padrões restaurados! A página será recarregada.")
+            st.rerun()
+        else:
+            st.error("Erro ao restaurar. Verifique os logs.")
 
 # ==================== FOOTER ====================
 st.markdown("---")

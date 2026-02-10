@@ -85,7 +85,16 @@ def init_database():
         # Check migrations/schema updates
         check_schema_updates()
         
-        # Seed defaults if tables are empty
+        # Seed defaults
+        seed_initial_data()
+                
+    except Exception as e:
+        print(f"Error initializing database: {e}")
+
+
+def seed_initial_data():
+    """Seeds the database with default values if tables are empty."""
+    try:
         with engine.connect() as conn:
             # Categorias
             if conn.execute(text("SELECT COUNT(*) FROM categorias")).scalar() == 0:
@@ -102,13 +111,14 @@ def init_database():
                 _seed_squads(conn)
                 conn.commit()
                 
-            # Produtos (New Check)
+            # Produtos
             if conn.execute(text("SELECT COUNT(*) FROM produtos")).scalar() == 0:
                 _seed_produtos(conn)
                 conn.commit()
-                
+        return True
     except Exception as e:
-        print(f"Error initializing database: {e}")
+        print(f"Error seeding data: {e}")
+        return False
 
 
 def check_schema_updates():
