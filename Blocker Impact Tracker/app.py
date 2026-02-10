@@ -509,6 +509,14 @@ with tab_config:
     st.markdown("### ⚙️ Gerenciar Opções")
     st.caption("Adicione, edite ou remova categorias, tipos de impacto e squads")
     
+    if st.button("🔄 Restaurar Padrões da Base", help="Recria categorias, squads e produtos padrão se estiverem faltando."):
+        if seed_initial_data():
+            st.success("✅ Padrões restaurados! A página será recarregada.")
+            st.rerun()
+        else:
+            st.error("Erro ao restaurar. Verifique os logs.")
+    st.markdown("---")
+    
     col_cat, col_tipo = st.columns(2)
     
     # ========== CATEGORIAS ==========
@@ -653,16 +661,6 @@ with tab_config:
                         st.rerun()
                     else:
                         st.error("❌ Já existe!")
-
-# ==================== RESTORE DEFAULTS ====================
-    st.markdown("---")
-    st.caption("🔧 Zona de Perigo / Manutenção")
-    if st.button("🔄 Restaurar Padrões da Base", help="Recria categorias, squads e produtos padrão se estiverem faltando."):
-        if seed_initial_data():
-            st.success("✅ Padrões restaurados! A página será recarregada.")
-            st.rerun()
-        else:
-            st.error("Erro ao restaurar. Verifique os logs.")
 
 # ==================== FOOTER ====================
 st.markdown("---")
