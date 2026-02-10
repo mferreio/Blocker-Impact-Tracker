@@ -79,24 +79,37 @@ def get_connection():
 def init_database():
     """Initializes the database schema."""
     try:
-        # Check for schema updates FIRST (before create_all to simplify logic or inside)
-        # Actually create_all won't add columns to existing tables.
-        
         # Create tables if not exist
         metadata.create_all(engine)
         
         # Check migrations/schema updates
         check_schema_updates()
         
-        # Check if we need to seed defaults
+        # Seed defaults if tables are empty
         with engine.connect() as conn:
-            # Check categories
-            result = conn.execute(text("SELECT COUNT(*) FROM categorias")).scalar()
-            if result == 0:
-                _insert_defaults(conn)
+            # Categorias
+            if conn.execute(text("SELECT COUNT(*) FROM categorias")).scalar() == 0:
+                _seed_categorias(conn)
                 conn.commit()
+            
+            # Tipos de Impacto
+            if conn.execute(text("SELECT COUNT(*) FROM tipos_impacto")).scalar() == 0:
+                _seed_tipos(conn)
+                conn.commit()
+                
+            # Squads
+            if conn.execute(text("SELECT COUNT(*) FROM squads")).scalar() == 0:
+                _seed_squads(conn)
+                conn.commit()
+                
+            # Produtos (New Check)
+            if conn.execute(text("SELECT COUNT(*) FROM produtos")).scalar() == 0:
+                _seed_produtos(conn)
+                conn.commit()
+                
     except Exception as e:
         print(f"Error initializing database: {e}")
+
 
 def check_schema_updates():
     """Checks and applies schema updates (migrations)."""
@@ -114,9 +127,7 @@ def check_schema_updates():
         print(f"Migration error: {e}")
 
 
-def _insert_defaults(conn):
-    """Inserts default values into configuration tables."""
-    # Categorias padrão
+def _seed_categorias(conn):
     default_categorias = [
         "Massa de Dados",
         "Ambiente/Downtime", 
@@ -128,16 +139,18 @@ def _insert_defaults(conn):
         categorias.insert(),
         [{"nome": cat, "is_default": True} for cat in default_categorias]
     )
-    
-    # Tipos de impacto padrão
+
+
+def _seed_tipos(conn):
     default_tipos = [
         {"nome": "Bloqueio Total (Sistema inoperante)", "peso": 1.0, "is_default": True},
         {"nome": "Lentidão Severa (Degradação alta)", "peso": 0.75, "is_default": True},
         {"nome": "Lentidão Moderada (Instabilidade leve)", "peso": 0.25, "is_default": True}
     ]
     conn.execute(tipos_impacto.insert(), default_tipos)
-    
-    # Squads padrão
+
+
+def _seed_squads(conn):
     default_squads = [
         "Squad Alpha", "Squad Beta", "Squad Gamma", "Squad Delta", "Squad Epsilon"
     ]
@@ -146,7 +159,8 @@ def _insert_defaults(conn):
         [{"nome": squad, "is_default": True} for squad in default_squads]
     )
 
-    # Produtos padrão
+
+def _seed_produtos(conn):
     default_produtos = [
         "Produto A", "Produto B", "Produto C"
     ]
